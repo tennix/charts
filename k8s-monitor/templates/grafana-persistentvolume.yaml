@@ -1,0 +1,32 @@
+{{- if .Values.grafana.localPersistentVolume }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ template "grafana.fullname" . }}
+  labels:
+    app: {{ template "grafana.name" . }}
+    chart: {{ template "grafana.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+        "volume.alpha.kubernetes.io/node-affinity": '{
+            "requiredDuringSchedulingIgnoredDuringExecution": {
+                "nodeSelectorTerms": [
+                    { "matchExpressions": [
+                        { "key": "kubernetes.io/hostname",
+                          "operator": "In",
+                          "values": [{{ .Values.grafana.localPersistentVolume.node | quote }}]
+                        }
+                    ]}
+                 ]}
+              }'
+spec:
+    capacity:
+      storage: {{ .Values.grafana.localPersistentVolume.storage }}
+    accessModes:
+    - ReadWriteOnce
+    persistentVolumeReclaimPolicy: Delete
+    storageClassName: local-storage
+    local:
+      path: {{ .Values.grafana.localPersistentVolume.path }}
+{{- end }}

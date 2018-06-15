@@ -1,0 +1,103 @@
+# Default values for k8s-monitor.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+rbac:
+  create: true
+
+clusterName: kubeadm-dind
+
+imagePullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  path: /
+  hosts:
+    - chart-example.local
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+alertmanager:
+  replicaCount: 1
+  image: uhub.ucloud.cn/pingcap/alertmanager:v0.14.0
+  slackWebhookURL: ""
+  defaultChannel: "#alerts-for-test"
+  criticalChannel: "#alerts"
+
+nodeExporter:
+  image: uhub.ucloud.cn/pingcap/node-exporter:v0.15.0
+
+prometheus:
+  replicaCount: 1
+  image: uhub.ucloud.cn/pingcap/prometheus:v2.0.0
+  nodeSelector:
+    kind: cluster-monitor
+  resources:
+    requests:
+      cpu: 500m
+      memory: 4096Mi
+    limits:
+      cpu: 600m
+      memory: 8192Mi
+  localPersistentVolume: {}
+    # node: kube-node-1
+    # storage: 500Gi
+    # path: /data/prometheus
+  retention: 15d
+  baseURL: /
+  scrapeEtcdEndpoints:
+  # - 172.16.10.2:2379
+
+grafana:
+  replicaCount: 1
+  image: uhub.ucloud.cn/pingcap/grafana:5.1.0
+  nodeSelector:
+    kind: cluster-monitor
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+  localPersistentVolume: {}
+    # node: kube-node-1
+    # storage: 2Gi
+    # path: /data/grafana
+  adminUser: admin
+  # adminPassword: strongpassword
+  plugins: "grafana-kubernetes-app"
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus:9090
+        access: proxy
+        isDefault: true
+
+kubeStateMetrics:
+  replicaCount: 1
+  image: uhub.ucloud.cn/pingcap/kube-state-metrics:v1.3.1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

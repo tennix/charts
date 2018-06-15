@@ -1,0 +1,837 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "prometheus.fullname" . }}
+  labels:
+    app: {{ template "prometheus.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+data:
+  record-rules.yml: |-
+    groups:
+    - name: kubernetes-normal
+      rules:
+      # These rules are from https://github.com/coreos/prometheus-operator/blob/master/contrib/kube-prometheus/assets/prometheus/rules/kubernetes.rules.yaml
+      - record: pod_name:container_memory_usage_bytes:sum # pause container name is POD
+        expr: sum(container_memory_usage_bytes{container_name!="POD",pod_name!=""}) BY (pod_name)
+
+      - record: pod_name:container_spec_cpu_shares:sum
+        expr: sum(container_spec_cpu_shares{container_name!="POD",pod_name!=""}) BY (pod_name)
+
+      - record: pod_name:container_cpu_usage:sum
+        expr: sum(rate(container_cpu_usage_seconds_total{container_name!="POD",pod_name!=""}[5m])) BY (pod_name)
+
+      - record: pod_name:container_fs_usage_bytes:sum
+        expr: sum(container_fs_usage_bytes{container_name!="POD",pod_name!=""}) BY (pod_name)
+
+      - record: namespace:container_memory_usage_bytes:sum
+        expr: sum(container_memory_usage_bytes{container_name!=""}) BY (namespace)
+
+      - record: namespace:container_spec_cpu_shares:sum
+        expr: sum(container_spec_cpu_shares{container_name!=""}) BY (namespace)
+
+      - record: namespace:container_cpu_usage:sum
+        expr: sum(rate(container_cpu_usage_seconds_total{container_name!="POD"}[5m])) BY (namespace)
+
+      - record: cluster:memory_usage:ratio
+        expr: sum(container_memory_usage_bytes{container_name!="POD",pod_name!=""}) BY (cluster) / sum(machine_memory_bytes) BY (cluster)
+
+      - record: cluster:container_spec_cpu_shares:ratio
+        expr: sum(container_spec_cpu_shares{container_name!="POD",pod_name!=""}) / 1000 / sum(machine_cpu_cores)
+
+      - record: cluster:container_cpu_usage:ratio
+        expr: sum(rate(container_cpu_usage_seconds_total{container_name!="POD",pod_name!=""}[5m])) / sum(machine_cpu_cores)
+
+      - record: apiserver_latency_seconds:quantile
+        expr: histogram_quantile(0.99, rate(apiserver_request_latencies_bucket[5m])) / 1e+06
+        labels:
+          quantile: "0.99"
+
+      - record: apiserver_latency:quantile_seconds
+        expr: histogram_quantile(0.9, rate(apiserver_request_latencies_bucket[5m])) / 1e+06
+        labels:
+          quantile: "0.9"
+
+      - record: apiserver_latency_seconds:quantile
+        expr: histogram_quantile(0.5, rate(apiserver_request_latencies_bucket[5m])) / 1e+06
+        labels:
+          quantile: "0.5"
+
+      # These rules are from https://github.com/coreos/prometheus-operator/blob/master/contrib/kube-prometheus/assets/prometheus/rules/kube-scheduler.rules.yaml
+      - record: cluster:scheduler_e2e_scheduling_latency_seconds:quantile
+        expr: histogram_quantile(0.99, sum(scheduler_e2e_scheduling_latency_microseconds_bucket) BY (le, cluster)) / 1e+06
+        labels:
+          quantile: "0.99"
+      - record: cluster:scheduler_e2e_scheduling_latency_seconds:quantile
+        expr: histogram_quantile(0.9, sum(scheduler_e2e_scheduling_latency_microseconds_bucket) BY (le, cluster)) / 1e+06
+        labels:
+          quantile: "0.9"
+      - record: cluster:scheduler_e2e_scheduling_latency_seconds:quantile
+        expr: histogram_quantile(0.5, sum(scheduler_e2e_scheduling_latency_microseconds_bucket) BY (le, cluster)) / 1e+06
+        labels:
+          quantile: "0.5"
+      - record: cluster:scheduler_scheduling_algorithm_latency_seconds:quantile
+        expr: histogram_quantile(0.99, sum(scheduler_scheduling_algorithm_latency_microseconds_bucket) BY (le, cluster)) / 1e+06
+        labels:
+          quantile: "0.99"
+      - record: cluster:scheduler_scheduling_algorithm_latency_seconds:quantile
+        expr: histogram_quantile(0.9, sum(scheduler_scheduling_algorithm_latency_microseconds_bucket) BY (le, cluster)) / 1e+06
+        labels:
+          quantile: "0.9"
+      - record: cluster:scheduler_scheduling_algorithm_latency_seconds:quantile
+        expr: histogram_quantile(0.5, sum(scheduler_scheduling_algorithm_latency_microseconds_bucket) BY (le, cluster)) / 1e+06
+        labels:
+          quantile: "0.5"
+      - record: cluster:scheduler_binding_latency_seconds:quantile
+        expr: histogram_quantile(0.99, sum(scheduler_binding_latency_microseconds_bucket) BY (le, cluster)) / 1e+06
+        labels:
+          quantile: "0.99"
+      - record: cluster:scheduler_binding_latency_seconds:quantile
+        expr: histogram_quantile(0.9, sum(scheduler_binding_latency_microseconds_bucket) BY (le, cluster)) / 1e+06
+        labels:
+          quantile: "0.9"
+      - record: cluster:scheduler_binding_latency_seconds:quantile
+        expr: histogram_quantile(0.5, sum(scheduler_binding_latency_microseconds_bucket) BY (le, cluster)) / 1e+06
+        labels:
+          quantile: "0.5"
+
+      # These rules are from https://github.com/coreos/prometheus-operator/blob/master/contrib/kube-prometheus/assets/prometheus/rules/node.rules.yaml
+      - record: instance:node_cpu:rate:sum
+        expr: sum(rate(node_cpu{mode!="idle",mode!="iowait",mode!~"^(?:guest.*)$"}[3m])) BY (instance)
+
+      - record: instance:node_filesystem_usage:sum
+        expr: sum((node_filesystem_size{mountpoint="/"} - node_filesystem_free{mountpoint="/"})) BY (instance)
+
+      - record: instance:node_network_receive_bytes:rate:sum
+        expr: sum(rate(node_network_receive_bytes[3m])) BY (instance)
+
+      - record: instance:node_network_transmit_bytes:rate:sum
+        expr: sum(rate(node_network_transmit_bytes[3m])) BY (instance)
+
+      - record: instance:node_cpu:ratio
+        expr: sum(rate(node_cpu{mode!="idle",mode!="iowait"}[5m])) WITHOUT (cpu, mode) / ON(instance) GROUP_LEFT() count(sum(node_cpu) BY (instance, cpu)) BY (instance)
+
+      - record: cluster:node_cpu:sum_rate5m
+        expr: sum(rate(node_cpu{mode!="idle",mode!="iowait"}[5m]))
+
+      - record: cluster:node_cpu:ratio
+        expr: cluster:node_cpu:rate5m / count(sum(node_cpu) BY (instance, cpu))
+
+  alert-rules.yml: |-
+    groups:
+    # These alert rules are from https://github.com/coreos/etcd/blob/master/Documentation/op-guide/etcd3_alert.rules.yml
+    - name: etcd-cluster
+      rules:
+      - alert: K8S-ETCD-MemberDown
+        expr: up{job="kubernetes-etcd"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "K8s etcd member `{{`{{ $labels.instance }}`}}` is down"
+          description: "K8s etcd member `{{`{{ $labels.instance }}`}}` has been down for more than 2 minutes"
+
+      - alert: K8S-ETCD-InsufficientMembers
+        expr: count(up{job="kubernetes-etcd"} == 0) > (count(up{job="kubernetes-etcd"}) / 2 - 1)
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "etcd cluster insufficient members"
+          description: "If one more etcd member goes down the cluster will be unavailable"
+
+      - alert: K8S-ETCD-NoLeader
+        expr: etcd_server_has_leader{job="kubernetes-etcd"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "etcd member has no leader"
+          description: "etcd member `{{`{{ $labels.instance }}`}}` has no leader"
+
+      - alert: K8S-ETCD-HighNumberOfLeaderChanges
+        expr: increase(etcd_server_leader_changes_seen_total{job="kubernetes-etcd"}[1h]) > 3
+        labels:
+          severity: warning
+        annotations:
+          summary: "a high number of leader changes within the etcd cluster are happening"
+          description: "etcd instance `{{`{{ $labels.instance }}`}}` has seen `{{`{{ $value }}`}}` leader changes within the last hour"
+
+      - alert: K8S-ETCD-EtcdMemberCommunicationSlow
+        expr: histogram_quantile(0.99, rate(etcd_network_peer_round_trip_time_seconds_bucket{job="kubernetes-etcd"}[5m])) > 0.15
+        labels:
+          severity: warning
+        annotations:
+          summary: "etcd member communication is slow"
+          description: "etcd instance `{{`{{ $labels.instance }}`}}` member communication with `{{`{{ $labels.To }}`}}` is slow"
+
+      - alert: K8S-ETCD-HighNumberOfFailedGRPCRequests
+        expr: 100 * (sum(rate(grpc_server_handled_total{grpc_code!="OK",job="kubernetes-etcd"}[5m])) BY (grpc_service, grpc_method) / sum(rate(grpc_server_handled_total{job="kubernetes-etcd"}[5m])) BY (grpc_service, grpc_method)) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "a high number of gRPC requests are failing"
+          description: "`{{`{{ $value }}`}}`% of requests for `{{`{{ $labels.grpc_method }}`}}` failed on etcd instance `{{`{{ $labels.instance }}`}}`"
+
+      - alert: K8S-ETCD-HighNumberOfFailedGRPCRequests
+        expr: 100 * (sum(rate(grpc_server_handled_total{grpc_code!="OK",job="kubernetes-etcd"}[5m])) BY (grpc_service, grpc_method) / sum(rate(grpc_server_handled_total{job="kubernetes-etcd"}[5m])) BY (grpc_service, grpc_method)) > 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "a high number of gRPC requests are failing"
+          description: "`{{`{{ $value }}`}}`% of requests for `{{`{{ $labels.grpc_method }}`}}` failed on etcd instance `{{`{{ $labels.instance }}`}}`"
+
+      - alert: K8S-ETCD-GRPCRequestsSlow
+        expr: histogram_quantile(0.99, sum(rate(grpc_server_handling_seconds_bucket{job="kubernetes-etcd",grpc_type="unary"}[5m])) by (grpc_service, grpc_method, le)) > 0.15
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "slow gRPC requests"
+          description: "on etcd instance `{{`{{ $labels.instance }}`}}` gRPC requests to `{{`{{ $labels.grpc_method }}`}}` are slow"
+
+      - alert: K8S-ETCD-HighNumberOfFailedHTTPRequests
+        expr: 100 * (sum(rate(etcd_http_failed_total{job="kubernetes-etcd"}[5m])) BY (method) / sum(rate(etcd_http_received_total{job="kubernetes-etcd"}[5m])) BY (method)) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "a high number of HTTP requests are failing"
+          description: "`{{`{{ $value }}`}}`% of requests for `{{`{{ $labels.method }}`}}` failed on etcd instance `{{`{{ $labels.instance }}`}}`"
+
+      - alert: K8S-ETCD-HighNumberOfFailedHTTPRequests
+        expr: 100 * (sum(rate(etcd_http_failed_total{job="kubernetes-etcd"}[5m])) BY (method) / sum(rate(etcd_http_received_total{job="kubernetes-etcd"}[5m])) BY (method)) > 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "a high number of HTTP requests are failing"
+          description: "`{{`{{ $value }}`}}`% of requests for `{{`{{ $labels.method }}`}}` failed on etcd instance `{{`{{ $labels.instance }}`}}`"
+
+      - alert: K8S-ETCD-HTTPRequestsSlow
+        expr: histogram_quantile(0.99, rate(etcd_http_successful_duration_seconds_bucket[5m])) > 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "slow HTTP requests"
+          description: "on etcd instance `{{`{{ $labels.instance }}`}}` HTTP requests to `{{`{{ $labels.method }}`}}` are slow"
+
+      - record: instance:fd_utilization
+        expr: process_open_fds / process_max_fds
+      - alert: K8S-ETCD-FdExhaustionClose
+        expr: predict_linear(instance:fd_utilization[1h], 3600 * 4) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "file descriptors soon exhausted"
+          description: "`{{`{{ $labels.job }}`}}` instance `{{`{{ $labels.instance }}`}}` will exhaust its file descriptors soon"
+
+      - alert: K8S-ETCD-FdExhaustionClose
+        expr: predict_linear(instance:fd_utilization[10m], 3600) > 1
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          description: "`{{`{{ $labels.job }}`}}` instance `{{`{{ $labels.instance }}`}}` will exhaust its file descriptors soon"
+          summary: "file descriptors soon exhausted"
+
+      - alert: K8S-ETCD-EtcdMemberCommunicationSlow
+        expr: histogram_quantile(0.99, rate(etcd_network_peer_round_trip_time_seconds_bucket[5m])) > 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "etcd member communication is slow"
+          description: "etcd instance `{{`{{ $labels.instance }}`}}` member communication with `{{`{{ $labels.To }}`}}` is slow"
+
+      - alert: K8S-ETCD-HighNumberOfFailedProposals
+        expr: increase(etcd_server_proposals_failed_total{job="kubernetes-etcd"}[1h]) > 5
+        labels:
+          severity: warning
+        annotations:
+          summary: "a high number of proposals within the etcd cluster are failing"
+          description: "etcd instance `{{`{{ $labels.instance }}`}}` has seen `{{`{{ $value }}`}}` proposal failures within the last hour"
+
+      - alert: K8S-ETCD-HighFsyncDurations
+        expr: histogram_quantile(0.99, rate(etcd_disk_wal_fsync_duration_seconds_bucket[5m])) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "high fsync durations"
+          description: "etcd instance `{{`{{ $labels.instance }}`}}` fync durations are high"
+
+      - alert: K8S-ETCD-HighCommitDurations
+        expr: histogram_quantile(0.99, rate(etcd_disk_backend_commit_duration_seconds_bucket[5m])) > 0.25
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "high commit durations"
+          description: "etcd instance `{{`{{ $labels.instance }}`}}` commit durations are high"
+
+    - name: elasticsearch-cluster
+      # These rules are from https://github.com/justwatchcom/elasticsearch_exporter/blob/master/examples/prometheus/elasticsearch.rules.yml
+      rules:
+      - alert: K8S-ES-LowDataDisk
+        expr: 100 * ( elasticsearch_filesystem_data_size_bytes - elasticsearch_filesystem_data_free_bytes ) / elasticsearch_filesystem_data_size_bytes > 80
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "`{{`{{ $labels.instance }}`}}`: Low data disk space -- Elasticsearch"
+          description: "`{{`{{ $labels.instance }}`}}`: Data disk(Elasticsearch) usage is above 75% (current value is: `{{`{{ $value }}`}}`)"
+
+      - alert: K8S-ES-Status
+        expr: elasticsearch_cluster_health_status{color="green"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Elasticsearch cluster unhealthy"
+          description: "Elasticsearch cluster health color is not green"
+
+      - alert: K8S-ES-HeapTooHigh
+        expr: elasticsearch_jvm_memory_used_bytes{area="heap"} / elasticsearch_jvm_memory_max_bytes{area="heap"} > 0.9
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ElasticSearch node `{{`{{ $labels.node }}`}}` heap usage is high"
+          description: "The heap usage is over 90% for 15m"
+
+    - name: kubernetes-apiserver
+      # These rules are from https://github.com/coreos/prometheus-operator/blob/master/contrib/kube-prometheus/assets/prometheus/rules/kubernetes.rules.yaml
+      rules:
+      - alert: K8S-APIServerDown
+        expr: up{job="kubernetes-apiserver"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "K8s apiserver `{{`{{ $labels.instance }}`}}` is down"
+          description: "K8s apiserver `{{`{{ $labels.instance }}`}}` has been down for more than 2 minutes"
+
+      - alert: K8S-APIServerLatencyHigh
+        expr: apiserver_latency_seconds:quantile{quantile="0.99",subresource!="log",verb!~"^(?:WATCH|WATCHLIST|PROXY|CONNECT)$"} > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API server high latency"
+          description: "the API server has a 99th percentile latency of `{{`{{ $value }}`}}` seconds for `{{`{{ $labels.verb }}`}}` `{{`{{ $labels.resource }}`}}`"
+
+      - alert: K8S-APIServerLatencyHigh
+        expr: apiserver_latency_seconds:quantile{quantile="0.99",subresource!="log",verb!~"^(?:WATCH|WATCHLIST|PROXY|CONNECT)$"} > 4
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API server high latency"
+          description: "the API server has a 99th percentile latency of `{{`{{ $value }}`}}` seconds for `{{`{{ $labels.verb }}`}}` `{{`{{ $labels.resource }}`}}`"
+
+      - alert: K8S-APIServerErrorsHigh
+        expr: rate(apiserver_request_count{code=~"^(?:5..)$"}[5m]) / rate(apiserver_request_count[5m]) * 100 > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API server request errors"
+          description: "API server returns errors for `{{`{{ $value }}`}}`% of requests"
+
+      - alert: K8S-APIServerErrorsHigh
+        expr: rate(apiserver_request_count{code=~"^(?:5..)$"}[5m]) / rate(apiserver_request_count[5m]) * 100 > 5
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API server request errors"
+          description: "API server returns errors for `{{`{{ $value }}`}}`% of requests"
+
+    - name: kubernetes-node
+      # These rules are from https://github.com/coreos/prometheus-operator/blob/master/contrib/kube-prometheus/assets/prometheus/rules/kubelet.rules.yaml
+      rules:
+      - alert: K8S-NodeNotReady   # this alert may be duplicate with K8S-KubeletDown
+        expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Node status is NotReady"
+          description: "The Kubelet on `{{`{{ $labels.node }}`}}` has not checked in with the API, or has set itself to NotReady, for more than 3m"
+
+      - alert: K8S-KubeletDown
+        expr: up{job="kubernetes-nodes"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "K8s Node `{{`{{ $labels.instance }}`}}` not ready"
+          description: "K8s Node `{{`{{ $labels.instance }}`}}` has been down for more than 2 minutes"
+
+      - alert: K8S-KubeletDown
+        expr: up{job="kubernetes-nodes"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "K8s Node `{{`{{ $labels.instance }}`}}` not ready"
+          description: "K8s Node `{{`{{ $labels.instance }}`}}` has been down for more than 5 minutes"
+
+      - alert: K8S-KubeletTooManyPods
+        expr: kubelet_running_pod_count{job="kubernetes-nodes"} > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kubelet is close to pod limit"
+          description: "Kubelet `{{`{{ $labels.instance }}`}}` is running `{{`{{ $value }}`}}` pods, close to the limit of 110"
+
+      - alert: K8S-KubeProxyDown
+        expr: kube_pod_info{created_by_name="kube-proxy"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "K8s `{{`{{ $labels.node }}`}}` kube-proxy is down"
+          description: "K8s `{{`{{ $labels.node }}`}}` kube-proxy has been down for more than 3 minutes"
+
+      - alert: K8S-KubeSystemPodDown
+        expr: kube_pod_status_phase{namespace="kube-system",phase="Running"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "K8s pod `{{`{{ $labels.pod }}`}}` in kube-system namespace not running"
+          description: "K8s pod `{{`{{ $labels.pod }}`}}` in kube-system namespace has been down for more than 3 minutes"
+
+      - alert: K8S-PodWaiting
+        expr: kube_pod_container_status_waiting_reason{reason!="ContainerCreating"} == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "K8s pod `{{`{{ $labels.pod }}`}}` waiting"
+          description: "K8s pod `{{`{{ $labels.namespace }}`}}`/`{{`{{ $labels.pod }}`}}` container `{{`{{ $labels.container }}`}}` waiting: `{{`{{ $labels.reason }}`}}`"
+
+      - alert: K8S-EndpointNotReady
+        expr: kube_endpoint_address_not_ready > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "K8s endpoint `{{`{{ $labels.endpoint }}`}}` address not ready"
+          description: "K8s endpoint `{{`{{ $labels.namespace }}`}}`/`{{`{{ $labels.endpoint }}`}}` address has been not ready for 5 minutes"
+
+      - alert: K8S-PodOOMKilled
+        expr: kube_pod_container_status_terminated_reason{reason="OOMKilled"} == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "K8s pod `{{`{{ $labels.pod }}`}}` OOM killed"
+          description: "K8s pod `{{`{{ $labels.namespace }}`}}`/`{{`{{ $labels.pod }}`}}` container `{{`{{ $labels.container }}`}}` get killed because of OOM"
+
+      - alert: K8S-PodTerminatedUnexpectedly
+        expr: kube_pod_container_status_terminated_reason{reason!="OOMKilled"} == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "K8s pod `{{`{{ $labels.pod }}`}}` terminated unexpectedly"
+          description: "K8s pod `{{`{{ $labels.namespace }}`}}`/`{{`{{ $labels.pod }}`}}` container `{{`{{ $labels.container }}`}}` terminated unexpected: `{{`{{ $labels.reason }}`}}`"
+
+      # These rules are from https://github.com/coreos/prometheus-operator/blob/master/contrib/kube-prometheus/assets/prometheus/rules/node.rules.yaml
+      - alert: K8S-NodeHighMemoryUsage
+        expr: (((node_memory_MemTotal-node_memory_MemFree-node_memory_Cached)/(node_memory_MemTotal)*100)) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "K8s Node `{{`{{ $labels.instance }}`}}` has high memory usage"
+          description: "K8s Node `{{`{{ $labels.instance }}`}}` memory usage is above 80% (current value is: `{{`{{ $value }}`}}`)"
+
+      - alert: K8S-NodeLowRootDisk
+        expr: ((node_filesystem_size{mountpoint="/"} - node_filesystem_free{mountpoint="/"} ) / node_filesystem_size{mountpoint="/"} * 100) > 75
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "K8s Node `{{`{{ $labels.kubernetes_node_name }}`}}` has low root disk space"
+          description: "K8s Node `{{`{{ $labels.kubernetes_node_name }}`}}` root disk usage is above 75% (current value is: `{{`{{ $value }}`}}`)"
+
+      - alert: K8S-NodeExporterDown
+        expr: up{k8s_app="node-exporter",job="kubernetes-pods",kubernetes_namespace="kube-system"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "K8s node-exporter `{{`{{ $labels.kubernetes_pod_name }}`}}` is down"
+          description: "K8s node-exporter `{{`{{ $labels.kubernetes_namespace }}`}}`/`{{`{{ $labels.kubernetes_pod_name }}`}}` on node `{{`{{ $labels.kubernetes_node_name }}`}}` has been down for more than 10 minutes"
+
+      - alert: K8S-NodeDiskRunningFull
+        expr: predict_linear(node_filesystem_free[6h], 3600 * 24) < 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "K8s Node `{{`{{ $labels.kubernetes_node_name }}`}}` disk is running full within 24h"
+          description: "K8s Node `{{`{{ $labels.kubernetes_node_name }}`}}` disk `{{`{{ $labels.device }}`}}` is running full within the next 24 hours (mounted at `{{`{{ $labels.mountpoint }}`}}`)"
+
+      - alert: K8S-NodeDiskRunningFull
+        expr: predict_linear(node_filesystem_free[30m], 3600 * 2) < 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "K8s Node `{{`{{ $labels.kubernetes_node_name }}`}}` disk is running full within 2h"
+          description: "K8s Node `{{`{{ $labels.kubernetes_node_name }}`}}` disk `{{`{{ $labels.device }}`}}` is running full within the next 2 hours (mounted at `{{`{{ $labels.mountpoint }}`}}`)"
+
+      - alert: K8S-NodeCPUUsage
+        expr: (100 - (avg by (instance) (irate(node_cpu{app="node-exporter",kubernetes_namespace="kube-system",mode="idle"}[5m])) * 100)) > 75
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "K8s Node `{{`{{ $labels.kubernetes_node_name }}`}}` has high CPU usage"
+          description: "K8s Node `{{`{{ $labels.kubernetes_node_name }}`}}` CPU usage is above 75% (current value is: `{{`{{ $value }}`}}`)"
+
+    - name: kubernetes-pod
+      rules:
+      - alert: K8S-PodDown      # normal pods
+        expr: up{job="kubernetes-pods",namespace!="kube-system"} == 0
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "K8s Pod `{{`{{ $labels.kubernetes_pod_name }}`}}` down"
+          description: "K8s Pod `{{`{{ $labels.kubernetes_namespace }}`}}`/`{{`{{ $labels.kubernetes_pod_name }}`}}` on `{{`{{ $labels.kubernetes_node_name }}`}}` has been down for more than 3 minutes"
+
+      - record: pod_container:memory_usage
+        expr: container_memory_usage_bytes{job="kubernetes-cadvisor",pod_name!=""}/container_spec_memory_limit_bytes{job="kubernetes-cadvisor"}
+      - alert: K8S-PodHighMemoryUsage
+        expr: pod_container:memory_usage * 100 > 80 and pod_container:memory_usage < +Inf
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "K8s Pod `{{`{{ $labels.pod_name }}`}}` has high memory usage"
+          description: "K8s Pod `{{`{{ $labels.namespace }}`}}`/`{{`{{ $labels.pod_name }}`}}` container `{{`{{ $labels.container_name }}`}}` on `{{`{{ $labels.instance }}`}}` memory usage is above 80% (current value is `{{`{{ $value }}`}}`%)"
+
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      scrape_timeout: 15s
+      external_labels:
+        clustername: {{ .Values.clusterName }}
+
+    alerting:
+      alertmanagers:
+      - static_configs:
+        path_prefix: /
+        - targets:
+          - alertmanager:9093
+
+    rule_files:
+      - record-rules.yml
+      - alert-rules.yml
+
+    # A scrape configuration for running Prometheus on a Kubernetes cluster.
+    # This uses separate scrape configs for cluster components (i.e. API server, node)
+    # and services to allow each to use different authentication configs.
+    #
+    # Kubernetes labels will be added as Prometheus labels on metrics via the
+    # `labelmap` relabeling action.
+    #
+    # If you are using Kubernetes 1.7.2 or earlier, please take note of the comments
+    # for the kubernetes-cadvisor job; you will need to edit or remove this job.
+
+    # Scrape config for API servers.
+    #
+    # Kubernetes exposes API servers as endpoints to the default/kubernetes
+    # service so this uses `endpoints` role and uses relabelling to only keep
+    # the endpoints associated with the default/kubernetes service using the
+    # default named port `https`. This works for single API server deployments as
+    # well as HA API server deployments.
+    scrape_configs:
+    {{- if .Values.prometheus.scrapeEtcdEndpoints }}
+    - job_name: "kubernetes-etcd"
+      scheme: https
+      tls_config:
+        insecure_skip_verify: true
+      static_configs:
+      - targets:
+          {{ range .Values.prometheus.scrapeEtcdEndpoints }}
+          - {{ . }}
+          {{- end }}
+    {{- end }}
+    # - job_name: "es-node-exporter"
+    #   static_configs:
+    #   - targets:
+    #       - 10.19.165.94:9100
+    #       - 10.19.99.31:9100
+    #       - 10.19.33.153:9100
+
+    - job_name: 'kubernetes-apiserver'
+
+      kubernetes_sd_configs:
+      - role: endpoints
+
+      # Default to scraping over https. If required, just disable this or change to
+      # `http`.
+      scheme: https
+
+      # This TLS & bearer token file config is used to connect to the actual scrape
+      # endpoints for cluster components. This is separate to discovery auth
+      # configuration because discovery & scraping are two separate concerns in
+      # Prometheus. The discovery auth config is automatic if Prometheus runs inside
+      # the cluster. Otherwise, more config options have to be provided within the
+      # <kubernetes_sd_config>.
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        # If your node certificates are self-signed or use a different CA to the
+        # master CA, then disable certificate verification below. Note that
+        # certificate verification is an integral part of a secure infrastructure
+        # so this should only be disabled in a controlled environment. You can
+        # disable certificate verification by uncommenting the line below.
+        #
+        # insecure_skip_verify: true
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+      # Keep only the default/kubernetes service endpoints for the https port. This
+      # will add targets for each API server which Kubernetes adds an endpoint to
+      # the default/kubernetes service.
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: default;kubernetes;https
+
+    # Scrape config for nodes (kubelet).
+    #
+    # Rather than connecting directly to the node, the scrape is proxied though the
+    # Kubernetes apiserver.  This means it will work if Prometheus is running out of
+    # cluster, or can't connect to nodes for some other reason (e.g. because of
+    # firewalling).
+    - job_name: 'kubernetes-nodes'
+
+      # Default to scraping over https. If required, just disable this or change to
+      # `http`.
+      scheme: https
+
+      # This TLS & bearer token file config is used to connect to the actual scrape
+      # endpoints for cluster components. This is separate to discovery auth
+      # configuration because discovery & scraping are two separate concerns in
+      # Prometheus. The discovery auth config is automatic if Prometheus runs inside
+      # the cluster. Otherwise, more config options have to be provided within the
+      # <kubernetes_sd_config>.
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+      kubernetes_sd_configs:
+      - role: node
+
+      relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/${1}/proxy/metrics
+
+    # Scrape config for Kubelet cAdvisor.
+    #
+    # This is required for Kubernetes 1.7.3 and later, where cAdvisor metrics
+    # (those whose names begin with 'container_') have been removed from the
+    # Kubelet metrics endpoint.  This job scrapes the cAdvisor endpoint to
+    # retrieve those metrics.
+    #
+    # In Kubernetes 1.7.0-1.7.2, these metrics are only exposed on the cAdvisor
+    # HTTP endpoint; use "replacement: /api/v1/nodes/${1}:4194/proxy/metrics"
+    # in that case (and ensure cAdvisor's HTTP server hasn't been disabled with
+    # the --cadvisor-port=0 Kubelet flag).
+    #
+    # This job is not necessary and should be removed in Kubernetes 1.6 and
+    # earlier versions, or it will cause the metrics to be scraped twice.
+    - job_name: 'kubernetes-cadvisor'
+
+      # Default to scraping over https. If required, just disable this or change to
+      # `http`.
+      scheme: https
+
+      # This TLS & bearer token file config is used to connect to the actual scrape
+      # endpoints for cluster components. This is separate to discovery auth
+      # configuration because discovery & scraping are two separate concerns in
+      # Prometheus. The discovery auth config is automatic if Prometheus runs inside
+      # the cluster. Otherwise, more config options have to be provided within the
+      # <kubernetes_sd_config>.
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+      kubernetes_sd_configs:
+      - role: node
+
+      relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+
+    # Scrape config for service endpoints.
+    #
+    # The relabeling allows the actual service scrape endpoint to be configured
+    # via the following annotations:
+    #
+    # * `prometheus.io/scrape`: Only scrape services that have a value of `true`
+    # * `prometheus.io/scheme`: If the metrics endpoint is secured then you will need
+    # to set this to `https` & most likely set the `tls_config` of the scrape config.
+    # * `prometheus.io/path`: If the metrics path is not `/metrics` override this.
+    # * `prometheus.io/port`: If the metrics are exposed on a different port to the
+    # service then set this appropriately.
+    - job_name: 'kubernetes-service-endpoints'
+
+      kubernetes_sd_configs:
+      - role: endpoints
+
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+        action: replace
+        target_label: __scheme__
+        regex: (https?)
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+        action: replace
+        target_label: __address__
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_service_name]
+        action: replace
+        target_label: kubernetes_name
+
+    # Example scrape config for probing services via the Blackbox Exporter.
+    #
+    # The relabeling allows the actual service scrape endpoint to be configured
+    # via the following annotations:
+    #
+    # * `prometheus.io/probe`: Only probe services that have a value of `true`
+    - job_name: 'kubernetes-services'
+
+      metrics_path: /probe
+      params:
+        module: [http_2xx]
+
+      kubernetes_sd_configs:
+      - role: service
+
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_probe]
+        action: keep
+        regex: true
+      - source_labels: [__address__]
+        target_label: __param_target
+      - target_label: __address__
+        replacement: blackbox-exporter.example.com:9115
+      - source_labels: [__param_target]
+        target_label: instance
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_service_name]
+        target_label: kubernetes_name
+
+    # Example scrape config for probing ingresses via the Blackbox Exporter.
+    #
+    # The relabeling allows the actual ingress scrape endpoint to be configured
+    # via the following annotations:
+    #
+    # * `prometheus.io/probe`: Only probe services that have a value of `true`
+    - job_name: 'kubernetes-ingresses'
+
+      metrics_path: /probe
+      params:
+        module: [http_2xx]
+
+      kubernetes_sd_configs:
+      - role: ingress
+
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_ingress_annotation_prometheus_io_probe]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_ingress_scheme,__address__,__meta_kubernetes_ingress_path]
+        regex: (.+);(.+);(.+)
+        replacement: ${1}://${2}${3}
+        target_label: __param_target
+      - target_label: __address__
+        replacement: blackbox-exporter.example.com:9115
+      - source_labels: [__param_target]
+        target_label: instance
+      - action: labelmap
+        regex: __meta_kubernetes_ingress_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_ingress_name]
+        target_label: kubernetes_name
+
+    # Example scrape config for pods
+    #
+    # The relabeling allows the actual pod scrape endpoint to be configured via the
+    # following annotations:
+    #
+    # * `prometheus.io/scrape`: Only scrape pods that have a value of `true`
+    # * `prometheus.io/path`: If the metrics path is not `/metrics` override this.
+    # * `prometheus.io/port`: Scrape the pod on the indicated port instead of the
+    # pod's declared ports (default is a port-free target if none are declared).
+    - job_name: 'kubernetes-pods'
+
+      kubernetes_sd_configs:
+      - role: pod
+
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: kubernetes_pod_name
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        action: replace
+        target_label: kubernetes_node_name

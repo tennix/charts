@@ -1,0 +1,41 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "kube-state-metrics.fullname" . }}
+  labels:
+    app: {{ template "kube-state-metrics.name" . }}
+    component: kube-state-metrics
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.kubeStateMetrics.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "kube-state-metrics.name" . }}
+      component: kube-state-metrics
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "kube-state-metrics.name" . }}
+        component: kube-state-metrics
+        release: {{ .Release.Name }}
+    spec:
+      {{- if .Values.rbac.create }}
+      serviceAccountName: {{ template "kube-state-metrics.fullname" . }}
+      {{- end }}
+      containers:
+      - name: kube-state-metrics
+        image: {{ .Values.kubeStateMetrics.image }}
+        ports:
+        - name: http-metrics
+          containerPort: 8080
+        - name: telemetry
+          containerPort: 8081
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          timeoutSeconds: 5

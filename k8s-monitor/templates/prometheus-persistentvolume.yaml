@@ -1,0 +1,32 @@
+{{- if .Values.prometheus.localPersistentVolume }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ template "prometheus.fullname" . }}
+  labels:
+    app: {{ template "prometheus.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+        "volume.alpha.kubernetes.io/node-affinity": '{
+            "requiredDuringSchedulingIgnoredDuringExecution": {
+                "nodeSelectorTerms": [
+                    { "matchExpressions": [
+                        { "key": "kubernetes.io/hostname",
+                          "operator": "In",
+                          "values": [{{ .Values.prometheus.localPersistentVolume.node | quote }}]
+                        }
+                    ]}
+                 ]}
+              }'
+spec:
+    capacity:
+      storage: {{ .Values.prometheus.localPersistentVolume.storage }}
+    accessModes:
+    - ReadWriteOnce
+    persistentVolumeReclaimPolicy: Delete
+    storageClassName: local-storage
+    local:
+      path: {{ .Values.prometheus.localPersistentVolume.path }}
+{{- end }}

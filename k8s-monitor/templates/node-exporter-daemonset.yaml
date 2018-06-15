@@ -1,0 +1,62 @@
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: {{ template "node-exporter.fullname" . }}
+  labels:
+    app: {{ template "node-exporter.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "node-exporter.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+      labels:
+        app: {{ template "node-exporter.name" . }}
+        release: {{ .Release.Name }}
+    spec:
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      containers:
+      - name: node-exporter
+        image: {{ .Values.nodeExporter.image }}
+        args:
+        - --path.procfs=/proc_host
+        - --path.sysfs=/host_sys
+        ports:
+        - name: node-exporter
+          hostPort: 9100
+          containerPort: 9100
+        volumeMounts:
+        - name: sys
+          mountPath: /host_sys
+          readOnly: true
+        - name: proc
+          mountPath: /proc_host
+          readOnly: true
+        {{- if .Values.localtime }}
+        - name: localtime
+          mountPath: /etc/localtime
+          readOnly: true
+        {{- end }}
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: sys
+        hostPath:
+          path: /sys
+      {{- if .Values.localtime }}
+      - name: localtime
+        hostPath:
+          path: /etc/localtime
+      {{- end }}
+      restartPolicy: Always
+      hostNetwork: true
+      hostPID: true

@@ -1,0 +1,54 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "alertmanager.fullname" . }}
+  labels:
+    app: {{ template "alertmanager.name" . }}
+    component: alertmanager
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.alertmanager.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "alertmanager.name" . }}
+      component: alertmanager
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "alertmanager.name" . }}
+        component: alertmanager
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+      - name: alertmanager
+        image: {{ .Values.alertmanager.image }}
+        args:
+        - --web.listen-address=:9093
+        - --config.file=/etc/alertmanager/alertmanager.yml
+        - --web.external-url={{ .Values.alertmanager.baseURL }}
+        - --log.level=info
+        volumeMounts:
+        - name: alertmanager-config
+          mountPath: /etc/alertmanager
+        {{- if .Values.localtime }}
+        - mountPath: /etc/localtime
+          name: localtime
+        {{- end }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.alertmanager.prefixURL }}/#/status
+            port: 9093
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+      volumes:
+      - name: alertmanager-config
+        configMap:
+          name: alertmanager-config
+      {{- if .Values.localtime }}
+      - name: localtime
+        hostPath:
+          path: /etc/localtime
+      {{- end }}

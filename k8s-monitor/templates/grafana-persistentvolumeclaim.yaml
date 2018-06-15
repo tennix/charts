@@ -1,0 +1,18 @@
+{{- if .Values.grafana.localPersistentVolume }}
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: {{ template "grafana.fullname" . }}
+  labels:
+    app: {{ template "grafana.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.grafana.localPersistentVolume.storage }}
+  storageClassName: local-storage
+{{- end }}

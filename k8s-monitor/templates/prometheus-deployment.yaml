@@ -1,0 +1,85 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ template "prometheus.fullname" . }}
+  labels:
+    app: {{ template "prometheus.name" . }}
+    component: prometheus
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.prometheus.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "prometheus.name" . }}
+      component: prometheus
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "prometheus.name" . }}
+        component: prometheus
+        release: {{ .Release.Name }}
+    spec:
+      {{- if .Values.grafana.nodeSelector }}
+      nodeSelector:
+        {{- with .Values.grafana.nodeSelector }}
+{{ toYaml . | indent 8 }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.rbac.create }}
+      serviceAccountName: {{ template "prometheus.fullname" . }}
+      {{- end }}
+      containers:
+      - image: {{ .Values.prometheus.image }}
+        name: prometheus
+        args:
+        - --config.file=/etc/prometheus/prometheus.yml
+        - --web.external-url={{ .Values.prometheus.baseURL }}
+        - --web.enable-admin-api
+        - --web.enable-lifecycle
+        - --storage.tsdb.retention={{ .Values.prometheus.retention }}
+        - --storage.tsdb.path=/prometheus
+        ports:
+        - containerPort: 9090
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.prometheus.prefixURL }}/-/ready
+            port: 9090
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.prometheus.prefixURL }}/-/healthy
+            port: 9090
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+        volumeMounts:
+        - mountPath: /prometheus
+          name: data
+        {{- if .Values.localtime }}
+        - mountPath: /etc/localtime
+          name: localtime
+        {{- end }}
+        - mountPath: /etc/prometheus
+          name: config
+        resources:
+{{ toYaml .Values.grafana.resources | indent 12 }}
+      volumes:
+      - name: data
+        {{- if .Values.prometheus.localPersistentVolume }}
+        persistentVolumeClaim:
+          claimName: {{ template "prometheus.fullname" . }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      {{- if .Values.localtime }}
+      - name: localtime
+        hostPath:
+          path: /etc/localtime
+      {{- end }}
+      - name: config
+        configMap:
+          name: prometheus-config

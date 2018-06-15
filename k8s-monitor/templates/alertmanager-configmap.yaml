@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "alertmanager.fullname" . }}
+  labels:
+    app: {{ template "alertmanager.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+data:
+  config.yml: |
+    global:
+      resolve_timeout: 5m
+      slack_api_url: {{ .Values.alertmanager.slackWebhookURL }}
+
+    # The directory from which notification templates are read.
+    templates:
+    - '/etc/alertmanager/template/*.tmpl'
+
+    # The root route on which each incoming alert enters.
+    route:
+      receiver: default-receiver
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      group_by: [cluster, alertname]
+      routes:
+      - receiver: critical-receiver
+        group_by: [cluster, alertname]
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 10m
+        match:
+          severity: critical
+
+    receivers:
+    - name: default-receiver
+      slack_configs:
+      - channel: {{ .Values.alertmanager.defaultChannel | quote }}
+        title: "`{{`{{ .CommonAnnotations.summary }}`}}`"
+        icon_emoji: ":k8s:"
+        color: '`{{`{{ if eq .CommonLabels.severity "warning" }}`}}`warning`{{`{{ else }}`}}`danger`{{`{{ end }}`}}`'
+        pretext: "`{{`{{ .CommonLabels.clustername }}`}}` cluster: `{{`{{ .CommonLabels.alertname }}`}}`"
+        text: "`{{`{{ range .Alerts }}`}}``{{`{{ .Annotations.description }}`}}`\n\n`{{`{{ end }}`}}`"
+
+    - name: critical-receiver
+      slack_configs:
+      - channel: {{ .Values.alertmanager.criticalChannel | quote }}
+        title: "`{{`{{ .CommonAnnotations.summary }}`}}`"
+        icon_emoji: ":k8s:"
+        color: '`{{`{{ if eq .CommonLabels.severity "warning" }}`}}`warning`{{`{{ else }}`}}`danger`{{`{{ end }}`}}`'
+        pretext: "`{{`{{ .CommonLabels.clustername }}`}}` cluster: `{{`{{ .CommonLabels.alertname }}`}}`"
+        text: "`{{`{{ range .Alerts }}`}}``{{`{{ .Annotations.description }}`}}`\n\n`{{`{{ end }}`}}`"
